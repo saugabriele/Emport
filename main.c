@@ -11,51 +11,58 @@
 
 
 int main() {
-    int my_pipe[2];
-    char stringa[100]:
+    int fd, my_pipe[2];
 
-    if(pipe(my_pipe) == -1)
+    fd = open("output.txt", O_WRONLY|O_CREAT|O_TRUNC, 0644);
+
+    if(fd == -1)
     {
-        perror("Error opening the pipe:");
+        perror("Error opening the file\n");
         exit(-1);
     }
-
-    printf("Insert your string:\n");
-    scanf("%[^\n]", stringa);
 
     switch(fork())
     {
         case -1:
-            perror("Error createing a child process\n");
+            perror("Error fork");
             exit(-1);
 
         case 0:
             close(my_pipe[READ]);
 
-            if(dup2(my_pipe[WRITE],1)==-1)
+            if(dup2(my_pipe[WRITE],STDOUT_FILENO)==-1)
             {
-                perror("Error dup");
+                perror("Error dup2");
                 exit(-1);
             }
 
-            if(execl("./called","called",stringa,(char *) NULL)==-1)
+            if(execl("./first","first",(char *) NULL)==-1)
             {
-                perror("Error executing");
+                perror("Error exec");
                 exit(-1);
             }
-            break;
+        break;
+    }
 
-        default:
-            close(my_pipe[WRITE]);
+    close(my_pipe[WRITE]);
 
-            if(read(my_pipe[READ], &stringa, sizeof(stringa))== -1)
-            {
-                perror("Error reading");
-                exit(-1);
-            }
+    if(dup2(my_pipe[READ],STDIN_FILENO)==-1)
+    {
+        perror("Error dup");
+        exit(-1);
+    }
 
-            printf("La stringa è: %s",stringa);
-            wait(NULL);
-            break;
+    printf("Write <exit!>  to exit\n");
+
+    if(dup2(fd,STDOUT_FILENO)==-1)
+    {
+        perror("Error dup");
+        exit(-1);
+    }
+
+    if(execl("./second","second",(char *) NULL)==-1)
+    {
+        perror("Error exec");
+        exit(-1);
     }
 }
