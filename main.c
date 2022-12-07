@@ -11,108 +11,51 @@
 
 
 int main() {
-    int pid;
-    double fact, number;
-    bool go_ahead;
-    int numpipe[2], controlpipe[2];
-    char ans[1];
-    FILE *file;
+    int my_pipe[2];
+    char stringa[100]:
 
-    if (pipe(numpipe) == -1)
+    if(pipe(my_pipe) == -1)
     {
-        perror("Eror opening pipe");
+        perror("Error opening the pipe:");
         exit(-1);
     }
 
-    if (pipe(controlpipe) == -1)
-    {
-        perror("Eror opening pipe");
-        exit(-1);
-    }
+    printf("Insert your string:\n");
+    scanf("%[^\n]", stringa);
 
-    if((pid = fork()) == -1)
+    switch(fork())
     {
-        perror("Error:");
-        exit(-1);
-    }
+        case -1:
+            perror("Error createing a child process\n");
+            exit(-1);
 
-    switch(pid)
-    {
         case 0:
-            close(controlpipe[WRITE]);
-            close(numpipe[WRITE]);
+            close(my_pipe[READ]);
 
-            while(true)
+            if(dup2(my_pipe[WRITE],1)==-1)
             {
-                if(read(controlpipe[READ],&go_ahead,sizeof(go_ahead))==-1)
-                {
-                    perror("Error reading: ");
-                    return (-1);
-                }
-                if(!go_ahead)
-                {
-                    exit(0);
-                }
-
-                if(read(numpipe[READ], &number, sizeof(number))==-1)
-                {
-                    perror("Error reading: ");
-                    return(-1);
-                }
-                fact = number;
-                while(number >= 2)
-                {
-                    fact *= (number - 1);
-                    number--;
-                }
-                if(fprintf(file, "%f = %f\n",number,fact)==-1)
-                {
-                    perror("Error writing file");
-                    return(-1);
-                }
+                perror("Error dup");
+                exit(-1);
             }
 
+            if(execl("./called","called",stringa,(char *) NULL)==-1)
+            {
+                perror("Error executing");
+                exit(-1);
+            }
+            break;
 
         default:
-            close(controlpipe[READ]);
-            close(numpipe[READ]);
+            close(my_pipe[WRITE]);
 
-            printf("Do you want to calculate a factorial? [y/n]\n");
-            scanf("%c", ans);
-
-            if(strcmp(ans,"n") == 0)
+            if(read(my_pipe[READ], &stringa, sizeof(stringa))== -1)
             {
-                go_ahead = false;
-                if(write(controlpipe[WRITE],&go_ahead,sizeof(go_ahead))==-1)
-                {
-                    perror("Error:");
-                    exit(-1);
-                }
-                printf("Bye");
-                exit 0;
+                perror("Error reading");
+                exit(-1);
             }
-            else if(strcmp(ans,"y") == 0)
-            {
-                go_ahead(true);
-                if(write(controlpipe[WRITE],&go_ahead,sizeof(go_ahead))==-1)
-                {
-                    perror("Error:");
-                    exit(-1);
-                }
 
-                printf("Type the number: \n");
-                scanf("%lf", &number);
-
-                if(write(numpipe[WRITE],&number,sizeof(number))==-1) {
-                    perror("Error: ");
-                    exit(-1);
-                }
-            }
-            else
-            {
-                printf("What?\n");
-            }
-            while(getchar()!= "\n");
+            printf("La stringa è: %s",stringa);
             wait(NULL);
+            break;
     }
 }
