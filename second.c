@@ -2,61 +2,59 @@
 // Created by Utente on 07/12/2022.
 //
 #include <stdio.h>
+#include <stdlib.h>
+#include <stdbool.h>
 #include <unistd.h>
 #include <fcntl.h>
-#include <stdbool.h>
-
-#include <sys/types.h>
+#include <string.h>
+#include <sys/wait.h>
 #include <sys/stat.h>
 
-int main(int argc, char *argv[])
-{
-    int i = 5;
-    int fd_namedpipe;
-    int num;
+#define PIPE_NAME "/tmp/named_pipe"
+#define READ 0
+#define WRITE 1
+
+/*
+In a loop, the client prompts the user to type a number.
+The number is then passed to the server process using a named pipe.
+*/
+
+int main() {
+
+    double number;
     char ans[1];
+    int named_pipe;
 
-    while(access("/named_pipe", F_OK) && i>0)
-    {
-        printf("Trying (%d)\n",i);
-        spleep(5);
-        i--;
+    /* the named pipe is opened in write-only mode */
+    if ((named_pipe = open(PIPE_NAME, O_WRONLY)) == -1) {
+        perror("Error opening the pipe.");
+        return -1;
     }
 
-    if(i==0)
-    {
-        printf("server not running\n");
-        exit(0);
-    }
+    while (true) {
 
-    if((fd_namedpipe = open("/named_pipe",O_WRONLY)) == -1)
-    {
-        perror("Error opening the named pipe\n");
-        return(-1);
-    }
-
-    while(true) {
-        printf("Do you want to calculate a factorial? [y/n]\n");
-        scanf("%c",ans);
+        printf("\nDo you want to calculate a factorial? [y|n]\n");
+        scanf("%c", ans);
 
         if (strcmp(ans, "n") == 0){
             printf("\nBye\n");
             exit(0);
         }
 
-        else if(ans == 'y') {
-            printf("Select a number to calculate the fact:\n");
-            scanf("%d", &num);
+        else if (strcmp(ans, "y") == 0){
 
-            if (write(fd_namedpipe, &num, sizeof(num)) == -1) {
-                perror("Error writing on the pipe\n");
-                exit(-1);
+            printf("Type the number.\n");
+            scanf("%lf", &number);
+
+            if(write(named_pipe, &number, sizeof(number))==-1){  //writing on the named pipe
+                perror("error during writing in the named pipe");
+                return -1;
             }
         }
-        else
-            {
-                printf("What?\n");
-            }
+
+        else{
+            printf("What?\n");
+        }
 
         while (getchar() != '\n'); // A trick to empty the standard input
     }
