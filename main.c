@@ -1,68 +1,71 @@
 #include <stdio.h>
-#include <string.h>
-#include <unistd.h>
 #include <fcntl.h>
-#include <stdlib.h>
+#include <unistd.h>
 #include <stdbool.h>
+
 #include <sys/types.h>
-#include <sys/wait.h>
-#define READ 0
-#define WRITE 1
+#include <sys/stat.h>
 
 
-int main() {
-    int fd, my_pipe[2];
+int main(int argc, char *argv[])
+{
+    int fd_namedpipe, num;
+    int fact;
+    FILE *output_file;
 
-    fd = open("output.txt", O_WRONLY|O_CREAT|O_TRUNC, 0644);
-
-    if(fd == -1)
+    if(unlink("/named_pipe") == -1)
     {
-        perror("Error opening the file\n");
+        perror("Error unlinking the pipe\n");
+        return -1;
+    }
+
+    if(mkfifo("/named_pipe",0777) == -1)
+    {
+        perror("Error creating named pipe");
+        return -1;
+    }
+
+    if((fd_namedpipe = open("/named_pipe",O_RDWR)) == -1)
+    {
+        perror("Error opening the named pipe");
+        if(close(fd_namedpipe)==-1)
+        {
+            perror("Error cosing th pipe\n");
+        }
         exit(-1);
     }
 
-    switch(fork())
-    {
-        case -1:
-            perror("Error fork");
+    while(true) {
+        if ((num = read(fd_namedpipe, &num, sizeof(int))) == -1) {
+            perror("Error reading the named pipe");
             exit(-1);
+        }
 
-        case 0:
-            close(my_pipe[READ]);
-
-            if(dup2(my_pipe[WRITE],STDOUT_FILENO)==-1)
-            {
-                perror("Error dup2");
+        switch (fork()) {
+            case -1:
+                perror("Error creating a child process");
                 exit(-1);
-            }
 
-            if(execl("./first","first",(char *) NULL)==-1)
-            {
-                perror("Error exec");
-                exit(-1);
-            }
-        break;
+            case 0:
+                for (int i = num; i > 2; i--) {
+                    num *= num - 1;
+                }
+
+                output_file = fopen("output.txt", "a"); // opening the output file
+
+                if ((fprintf(output_file, "%f! = %f\n", num, fact)) == -1){ // writing on the file
+                    perror("error during writing in the file\n");
+                    return -1;
+                }
+
+                fclose(output_file);
+                break;
+        }
     }
 
-    close(my_pipe[WRITE]);
-
-    if(dup2(my_pipe[READ],STDIN_FILENO)==-1)
+    if(close(fd_namedpipe) == -1)
     {
-        perror("Error dup");
-        exit(-1);
-    }
-
-    printf("Write <exit!>  to exit\n");
-
-    if(dup2(fd,STDOUT_FILENO)==-1)
-    {
-        perror("Error dup");
-        exit(-1);
-    }
-
-    if(execl("./second","second",(char *) NULL)==-1)
-    {
-        perror("Error exec");
+        perror("Cannot close the pipe");
         exit(-1);
     }
 }
