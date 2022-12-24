@@ -1,102 +1,71 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <stdbool.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <string.h>
-#include <sys/wait.h>
-
-#include <sys/stat.h>
-
-#define PIPE_NAME "/tmp/named_pipe"
-#define READ 0
-#define WRITE 1
-
-/*
-Each time the server recieves a number, it generates a child.
-The child calculates the factorial of that number and it writes the result in a text file.
-*/
-
-int remove_pipe(int pipedes);
-
-int main()
-{
-
-    double number, fact;
-    int named_pipe;
-    FILE *output_file;
+#include "./server.h"
 
 
-    if (unlink(PIPE_NAME) == -1){  // necessary if the pipe already exists
-        perror("Error unlinking the pipe");
-        return -1;
+int main(int argc, char **argv) {
+
+    int fd_pipe,fd_ppipe;
+    char buffer[PIPE_BUF];
+    int num_bytes;
+    message m;
+    char reply[]="My warmest greetings\0";
+    int reply_len;
+
+
+    if(mkfifo(NAMEDPIPE,0666)==-1) {
+        perror("named pipe not created");
+        exit(-1);
     }
 
-
-    // creation of a named pipe with RW permssions
-    if (mkfifo(PIPE_NAME, 0666) == -1)
-    {
-        perror("Error creating the named pipe.");
-        return -1;
+    //the server opens the pipe in READ & WRITE mode
+    //when clients are not running, the server can wait on READ
+    //because it is still opened for writing
+    //to stop the server, you must define a "command" that, when received by the server
+    //will force the server to close the pipe
+    if((fd_pipe=open(NAMEDPIPE,O_RDWR))==-1) {
+        perror("named pipe not opened");
+        exit(-1);
     }
 
+    //in this example the server runs only once.
+    //To wait for multiple clients, you must use a while loop
+    while(true) {
+        printf("Waiting for request...");
 
-    /* the pipe is opened in read and write mode because if you open it in read-only mode, the function read won't be
-        blocking as soon as the client will be closed */
-    if ((named_pipe = open(PIPE_NAME, O_RDWR)) == -1)
-    {
-        perror("Error opening the pipe.");
-        if (remove_pipe(named_pipe) == -1)
-            perror("Error closing/removing the pipe.");
-        return -1;
-    }
-
-
-
-
-    printf("Server is running.\n\n");
-
-    while (true){
-
-        if (read(named_pipe, &number, sizeof(number)) == -1){	 // reading from the named pipe
-            perror("Error reading from pipe.");
-            return -1;
+        if ((num_bytes = read(fd_pipe, &m, sizeof(m))) == -1) {
+            perror("not possible to read from the pipe");
+            exit(-1);
         }
 
-        switch (fork())
-        {
+        printf("Request received ...");
 
-            case -1:
-                perror("Server - fork error");
-                exit(-1);
+        printf("%s\n", m.text);
 
-            case 0:
-                //--- CHILD ------------------------------------------------------
+        if ((fd_ppipe = open(m.private_pipe, O_WRONLY)) == -1) {
+            perror("private pipe not opened");
+            exit(-1);
+        }
 
-                fact = 1;
-                for (int i = 1; i <= number; i++){      	// calculating the fatorial
-                    fact *= i;
-                }
+        reply_len = strlen(reply);
 
+        if (write(fd_ppipe, reply, reply_len + 1) == -1) {
+            perror("cannot write to the private pipe");
+            exit(-1);
+        }
 
-                output_file = fopen("output.txt", "a"); // opening the output file
-
-                if ((fprintf(output_file, "%f! = %f\n", number, fact)) == -1){ // writing on the file
-                    perror("error during writing in the file\n");
-                    return -1;
-                }
-
-                fclose(output_file);
-                break;
+        //the client will stop wating for other messages on the pipe
+        if(close(fd_ppipe)==-1) {
+            perror("cannot close the pipe");
+            exit(-1);
         }
     }
-}
 
-int remove_pipe(int pipedes)
-{
-    if (close(pipedes) == -1)
-        return -1;
-    if (unlink(PIPE_NAME) == -1)
-        return -1;
-    return 0;
+    if(close(fd_pipe)==-1) {
+        perror("cannot close the pipe");
+        exit(-1);
+    }
+
+    if(unlink(NAMEDPIPE)==-1) {
+        perror("cannot delete the pipe");
+        exit(-1);
+    }
 }
